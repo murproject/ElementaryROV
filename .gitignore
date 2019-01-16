@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+ElementaryROV/ElementaryROV.vcxproj.user
+ElementaryROV/ElementaryROV.vcxproj.filters
+ElementaryROV/Debug/ElementaryROV.with_bootloader.hex
+ElementaryROV/Debug/ElementaryROV.ino.with_bootloader.hex
+ElementaryROV/Debug/ElementaryROV.ino.hex
+ElementaryROV/Debug/ElementaryROV.ino.elf
+ElementaryROV/Debug/ElementaryROV.hex
+ElementaryROV/Debug/ElementaryROV.elf
+ElementaryROV/Debug/board.buildinfo
+.vs/ElementaryROV/v15/.suo
