@@ -79,7 +79,7 @@ int getAxisZVal() {
 	return axis;
 }
 
-const int MAXPOWER = 70;
+const int MAXPOWER = 100;
 
 int regulator(int pow) {
 	return constrain(pow, -MAXPOWER / getPowerDelimetr(), MAXPOWER / getPowerDelimetr());
