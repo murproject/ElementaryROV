@@ -1,174 +1,184 @@
 
-#include <Arduino.h>
-#include "pwm.h"
+#define UP 2
+#define LEFT 5
+#define DOWN 4
+#define RIGHT 3
+#define L 6
+#define R 7
+#define X A1
+#define Y A0
 
-SOFTPWM_DEFINE_CHANNEL(8, DDRB, PORTB, PORTB0);  //Arduino pin 8
-SOFTPWM_DEFINE_CHANNEL(9, DDRB, PORTB, PORTB1);  //Arduino pin 9
-SOFTPWM_DEFINE_CHANNEL(10, DDRB, PORTB, PORTB2);  //Arduino pin 10
-SOFTPWM_DEFINE_CHANNEL(11, DDRB, PORTB, PORTB3);  //Arduino pin 11
-SOFTPWM_DEFINE_CHANNEL(12, DDRB, PORTB, PORTB4);  //Arduino pin 12
-SOFTPWM_DEFINE_CHANNEL(13, DDRB, PORTB, PORTB5);  //Arduino pin 13
 
-SOFTPWM_DEFINE_OBJECT_WITH_PWM_LEVELS(20, 101);
-SOFTPWM_DEFINE_EXTERN_OBJECT_WITH_PWM_LEVELS(20, 101);
 
-int sign(int v) {
-	if (v >= 0) return 1;
-	if (v < 0) return -1;
+int8_t axis_trashold(int8_t value) {
+    if (abs(value) < 10) {
+        return 0;
+    }
+    return value;
 }
 
-const int X_OFFSET = 512;
-const int Y_OFFSET = 502;
-const int LOW_TRESHOLD = 5;
-const int TOP_TRESHOLD = 500;
+int8_t get_up() {
+    return digitalRead(UP);
+}
 
-const int AXISX = A0;
-const int AXISY = A1;
-const int AXISZ_UP = 2;
-const int AXISZ_DOWN = 4;
+int8_t get_down() {
+    return digitalRead(DOWN);
+}
 
+int8_t get_left() {
+    return digitalRead(LEFT);
+}
 
-typedef struct Thruster_type {
-	int pin1;
-	int pin2;
+int8_t get_right() {
+    return digitalRead(RIGHT);
+}
 
-	int initThruster(int pin1_, int pin2_) {
-		pin1 = pin1_;
-		pin2 = pin2_;
-		Palatis::SoftPWM.set(pin1, 0);
-		Palatis::SoftPWM.set(pin1, 0);
-		return 0;
-	}
+int get_X() {
+    return axis_trashold(map(analogRead(X), 0, 1024, -100, 100));
+}
 
-	void setPower(int power) {
-		if (power >= 0) {
-			Palatis::SoftPWM.set(pin1, power);
-			Palatis::SoftPWM.set(pin2, 0);
-		}
-		else {
-			Palatis::SoftPWM.set(pin1, 0);
-			Palatis::SoftPWM.set(pin2, -power);
-		}
-	}
-} Thrusters;
+int get_Y() {
+    return axis_trashold(map(analogRead(Y), 0, 1024, -100, 100));
+}
+int8_t get_L() {
 
-Thrusters leftMotor;
-Thrusters rightMotor;
-Thrusters verticalMotor;
+    return digitalRead(L);
+}
 
-int getPowerDelimetr() {
-	int delimetr = 1.2;
-	if (!digitalRead(3)) delimetr = 2;
-	if (!digitalRead(5)) delimetr = 1;
-	return delimetr;
+int8_t get_R() {
+
+    return digitalRead(R);
 }
 
 
-int getAxisVal(int pin, int offset) {
-	int axisRaw = analogRead(pin);
-	int axis = axisRaw - offset;
-	if (abs(axis) < LOW_TRESHOLD) axis = 0;
-	if (abs(axis) > TOP_TRESHOLD) axis = TOP_TRESHOLD * sign(axis);
-	return axis / (TOP_TRESHOLD / 100);
+int8_t clamp(int v) {
+    v = constrain(v, -100, 100);
+    return v;
 }
 
-int getAxisZVal() {
-	int axis = 0;
-	if (!digitalRead(AXISZ_DOWN)) axis = -100;
-	if (!digitalRead(AXISZ_UP)) axis = 100;
-	return axis;
+int8_t get_left_th() {
+    return clamp(get_Y() + get_X());
 }
 
-const int MAXPOWER = 100;
-
-int regulator(int pow) {
-	return constrain(pow, -MAXPOWER / getPowerDelimetr(), MAXPOWER / getPowerDelimetr());
+int8_t get_right_th() {
+    return clamp(get_Y() - get_X());
 }
 
-int vregulator(int pow) {
-	static long long time = 0;
-	static int signPower = 0;
-	int power = 0;
-	if (pow == 0) {
-		time = 0;
-		return 0;
-	}
-
-	time = (time == 0) || sign(signPower) != sign(pow) 
-		? millis() : time;
-
-	if (pow > 0) {
-		signPower = 1;
-		power = 20;
-		power += ((millis() - time) / 200);
-	} 
-	else {
-		signPower = -1;
-		power = -20;
-		power -= ((millis() - time) / 200);
-	}
-	
-	return constrain(power, -MAXPOWER / getPowerDelimetr(), MAXPOWER / getPowerDelimetr());
+int8_t get_vert_th_1() {
+    int8_t pwr = 0;
+    float del = 2;
+    if (get_up()) {
+        pwr = 100;
+    }
+    if (get_down()) {
+        pwr = -100;
+    }
+    if (get_left()) {
+        del = 1;
+    }
+    if (get_right()) {
+        del = 3;
+    }
+    return pwr / del;
+}
+int8_t get_vert_th_2() {
+    int8_t pwr = 0;
+    float del = 2;
+    if (get_up()) {
+        pwr = 100;
+    }
+    if (get_down()) {
+        pwr = -100;
+    }
+    if (get_left()) {
+        del = 1;
+    }
+    if (get_right()) {
+        del = 3;
+    }
+    return pwr / del;
 }
 
-#define RELEASE
+int8_t get_add() {
+    int8_t pwr = 0;
+    float del = 2;
+    if (get_L()) {
+        pwr = 100;
+    }
+    if (get_R()) {
+        pwr = -100;
+    }
+    if (get_left()) {
+        del = 1;
+    }
+    if (get_right()) {
+        del = 3;
+    }
+    return pwr / del;
+}
 
+void check() {
+    get_X();
+    get_Y();
+    get_left();
+    get_right();
+    get_up();
+    get_down();
+    get_L();
+    get_R();
+}
+#include <SoftwareSerial.h>
 
-
+SoftwareSerial owi(9, 10);
 void setup() {
-#ifndef RELEASE
-	
-#endif
-
-	Serial.begin(115200);
-
-	
-	Palatis::SoftPWM.begin(1000);
-
-	Palatis::SoftPWM.printInterruptLoad();
-	pinMode(AXISX, INPUT);
-	pinMode(AXISY, INPUT);
-	pinMode(AXISZ_UP, INPUT);
-	pinMode(AXISZ_DOWN, INPUT);
-	leftMotor.initThruster(8, 9);
-	rightMotor.initThruster(10, 11);
-	verticalMotor.initThruster(12, 13);
+    Serial.begin(115200);
+    owi.begin(1200);
+    pinMode(UP, INPUT);
+    pinMode(LEFT, INPUT);
+    pinMode(RIGHT, INPUT);
+    pinMode(DOWN, INPUT);
+    pinMode(L, INPUT);
+    pinMode(R, INPUT);
+    pinMode(X, INPUT);
+    pinMode(Y, INPUT);
 }
 
+unsigned char Crc8(uint8_t *pcBlock, unsigned int len) {
+    unsigned char crc = 0xFF;
+    unsigned int i;
 
+    while (len--)
+    {
+        crc ^= *pcBlock++;
+
+        for (i = 0; i < 8; i++)
+            crc = crc & 0x80 ? (crc << 1) ^ 0x31 : crc << 1;
+    }
+
+    return crc;
+}
 
 void loop() {
-	int axisx = getAxisVal(AXISX, X_OFFSET);
-	int axisy = getAxisVal(AXISY, Y_OFFSET);
-	int axisz = getAxisZVal();
-#ifdef RELEASE
-	leftMotor.setPower(regulator(axisy - axisx));
-	rightMotor.setPower(regulator(axisy + axisx));
-	verticalMotor.setPower(regulator(axisz));
-#else
-	Serial.print("LEFT: ");
-	Serial.print(regulator(axisy - axisx));
-	Serial.print(" RIGHT: ");
-	Serial.print(regulator(axisy + axisx));
-	Serial.print(" VERTICAL: ");
-	Serial.println(regulator(axisz));
-	if (digitalRead(3) && digitalRead(5)) {
-		leftMotor.setPower(regulator(axisy - axisx));
-		rightMotor.setPower(regulator(axisy + axisx));
-		verticalMotor.setPower(regulator(axisz));
-	} else {
-		if (!digitalRead(3)) {
-			leftMotor.setPower(regulator(100));
-			rightMotor.setPower(regulator(100));
-			verticalMotor.setPower(regulator(100));
-		}
-		if (!digitalRead(5)) {
-			leftMotor.setPower(regulator(-100));
-			rightMotor.setPower(regulator(-100));
-			verticalMotor.setPower(regulator(-100));
-		}
-	}
-	delay(100);
-#endif
 
+    uint8_t data[] = {
+        0xAA,
+        0xEE,
+        get_left_th(),
+        get_vert_th_1(),
+        get_right_th(),
+        get_vert_th_2(),
+        get_add(),
+        0,
+        0xEF
+    };
+    data[7] = Crc8(data + 2, 5);
+    owi.write(data, 9);
+   
+    for (int i = 0; i < 9; i++) {
+        Serial.print((int)data[i]);
+        Serial.print(' ');
+
+    }
+    Serial.println();
+    delay(50);
 }
