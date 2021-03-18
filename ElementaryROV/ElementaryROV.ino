@@ -1,3 +1,6 @@
+#include <SoftwareSerial.h>
+
+SoftwareSerial owi(9, 10);
 
 #define UP 2
 #define LEFT 5
@@ -8,7 +11,12 @@
 #define X A1
 #define Y A0
 
-
+void drifting_zero(int8_t &val) {
+    static const int range = 10;
+    if (abs(val) < 15) {
+        val = (millis() % range) - (range/2);
+    }
+}
 
 int8_t axis_trashold(int8_t value) {
     if (abs(value) < 10) {
@@ -41,17 +49,14 @@ int get_Y() {
     return axis_trashold(map(analogRead(Y), 0, 1024, -100, 100));
 }
 int8_t get_L() {
-
     return digitalRead(L);
 }
 
 int8_t get_R() {
-
     return digitalRead(R);
 }
 
-
-int8_t clamp(int v) {
+int8_t clamp(int8_t v) {
     v = constrain(v, -100, 100);
     return v;
 }
@@ -79,6 +84,7 @@ int8_t get_vert_th_1() {
     if (get_right()) {
         del = 3;
     }
+
     return pwr / del;
 }
 int8_t get_vert_th_2() {
@@ -96,6 +102,7 @@ int8_t get_vert_th_2() {
     if (get_right()) {
         del = 3;
     }
+
     return pwr / del;
 }
 
@@ -127,21 +134,6 @@ void check() {
     get_L();
     get_R();
 }
-#include <SoftwareSerial.h>
-
-SoftwareSerial owi(9, 10);
-void setup() {
-    Serial.begin(115200);
-    owi.begin(1200);
-    pinMode(UP, INPUT);
-    pinMode(LEFT, INPUT);
-    pinMode(RIGHT, INPUT);
-    pinMode(DOWN, INPUT);
-    pinMode(L, INPUT);
-    pinMode(R, INPUT);
-    pinMode(X, INPUT);
-    pinMode(Y, INPUT);
-}
 
 unsigned char Crc8(uint8_t *pcBlock, unsigned int len) {
     unsigned char crc = 0xFF;
@@ -158,9 +150,64 @@ unsigned char Crc8(uint8_t *pcBlock, unsigned int len) {
     return crc;
 }
 
-void loop() {
+void sendData(int8_t *data) {
+    for (uint8_t i = 2; i <= 5; i++) {
+        drifting_zero(data[i]);
+    }
 
-    uint8_t data[] = {
+    data[7] = Crc8(data + 2, 5);
+    owi.write((uint8_t*)(data), 9);
+
+    // debug output:
+    Serial.print("X:");
+    Serial.print(get_X());
+    Serial.print("\tY: ");
+    Serial.print(get_Y());
+    Serial.print('\n');
+
+    for (int i = 0; i < 9; i++) {
+        Serial.print((int8_t)data[i]);
+        Serial.print('\t');
+    }
+
+    Serial.println();
+}
+
+void ping_motors() {
+  for (int i = -10; i <= 10; i++) {
+    int8_t data[] = {
+          0xAA,
+          0xEE,
+          i,
+          i,
+          i,
+          i,
+          0,
+          0,
+          0xEF
+      };
+      sendData(data);
+  }
+}
+
+void setup() {
+    Serial.begin(115200);
+    owi.begin(1200);
+    pinMode(UP, INPUT);
+    pinMode(LEFT, INPUT);
+    pinMode(RIGHT, INPUT);
+    pinMode(DOWN, INPUT);
+    pinMode(L, INPUT);
+    pinMode(R, INPUT);
+    pinMode(X, INPUT);
+    pinMode(Y, INPUT);
+
+    delay(2200);
+    ping_motors();
+}
+
+void loop() {
+    int8_t data[] = {
         0xAA,
         0xEE,
         get_left_th(),
@@ -171,14 +218,8 @@ void loop() {
         0,
         0xEF
     };
-    data[7] = Crc8(data + 2, 5);
-    owi.write(data, 9);
-   
-    for (int i = 0; i < 9; i++) {
-        Serial.print((int)data[i]);
-        Serial.print(' ');
 
-    }
-    Serial.println();
+    sendData(data);
+
     delay(50);
 }
