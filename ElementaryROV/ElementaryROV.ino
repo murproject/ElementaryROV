@@ -12,14 +12,14 @@ SoftwareSerial owi(9, 10);
 #define Y A0
 
 void drifting_zero(int8_t &val) {
-    static const int range = 10;
+    static const int range = 5;
     if (abs(val) < 15) {
-        val = (millis() % range) - (range/2);
+        val = - (millis() % range);
     }
 }
 
 int8_t axis_trashold(int8_t value) {
-    if (abs(value) < 10) {
+    if (abs(value) < 20) {
         return 0;
     }
     return value;
@@ -42,21 +42,24 @@ int8_t get_right() {
 }
 
 int get_X() {
-    return axis_trashold(map(analogRead(X), 0, 1024, -100, 100));
+    return axis_trashold(map(analogRead(X), 0, 1023, -100, 100));
 }
 
 int get_Y() {
-    return axis_trashold(map(analogRead(Y), 0, 1024, -100, 100));
+    return axis_trashold(map(analogRead(Y), 0, 1023, -100, 100));
 }
 int8_t get_L() {
+
     return digitalRead(L);
 }
 
 int8_t get_R() {
+
     return digitalRead(R);
 }
 
-int8_t clamp(int8_t v) {
+
+int8_t clamp(int v) {
     v = constrain(v, -100, 100);
     return v;
 }
