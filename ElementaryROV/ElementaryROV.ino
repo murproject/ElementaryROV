@@ -1,6 +1,12 @@
 #include <SoftwareSerial.h>
+#include "src/Smoothed/Smoothed.h"
+#include "src/MSP/MSP.h"
 
-SoftwareSerial owi(9, 10);
+MSP msp;
+SoftwareSerial msp_uart(9, 10);
+
+#define MSP_SET_MOTOR 214
+#define SERIAL_DEBUG
 
 #define UP 2
 #define LEFT 5
@@ -11,18 +17,22 @@ SoftwareSerial owi(9, 10);
 #define X A1
 #define Y A0
 
-void drifting_zero(int8_t &val) {
-    static const int range = 5;
-    if (abs(val) < 15) {
-        val = - (millis() % range);
-    }
-}
+#define THRESHOLD 25
 
-int8_t axis_trashold(int8_t value) {
-    if (abs(value) < 20) {
+#define MOTORS_MIN 1100
+#define MOTORS_MAX 1900                                                 
+
+#define SMOOTH_COUNT 7
+
+Smoothed<float> axis_l;
+Smoothed<float> axis_r;
+Smoothed<float> axis_v;
+
+int8_t axis_treshold(int8_t value) {
+    if (abs(value) < THRESHOLD) {
         return 0;
     }
-    return value;
+    return map(abs(value), THRESHOLD, 100, 0, 100) * (value < 0 ? -1 : 1);
 }
 
 int8_t get_up() {
@@ -42,25 +52,26 @@ int8_t get_right() {
 }
 
 int get_X() {
-    return axis_trashold(map(analogRead(X), 0, 1023, -100, 100));
+    int value = axis_treshold(map(analogRead(X), 0, 1023, -100, 100));
+    return clamp(value);
 }
 
 int get_Y() {
-    return axis_trashold(map(analogRead(Y), 0, 1023, -100, 100));
+    int value = axis_treshold(map(analogRead(Y), 0, 1023, -100, 100));
+    return clamp(value);
 }
-int8_t get_L() {
 
+int8_t get_L() {
     return digitalRead(L);
 }
 
 int8_t get_R() {
-
     return digitalRead(R);
 }
 
-
 int8_t clamp(int v) {
-    v = constrain(v, -100, 100);
+    int8_t divider = get_divider();
+    v = constrain(v, (-100 / divider), (100 / divider));
     return v;
 }
 
@@ -72,130 +83,47 @@ int8_t get_right_th() {
     return clamp(get_Y() - get_X());
 }
 
-int8_t get_vert_th_1() {
+int8_t get_vert_th() {
     int8_t pwr = 0;
-    float del = 2;
+
     if (get_up()) {
-        pwr = 100;
+        pwr = -100;
     }
+
     if (get_down()) {
-        pwr = -100;
-    }
-    if (get_left()) {
-        del = 1;
-    }
-    if (get_right()) {
-        del = 3;
-    }
-
-    return pwr / del;
-}
-int8_t get_vert_th_2() {
-    int8_t pwr = 0;
-    float del = 2;
-    if (get_up()) {
         pwr = 100;
     }
-    if (get_down()) {
-        pwr = -100;
-    }
-    if (get_left()) {
-        del = 1;
-    }
+
+    return clamp(pwr);
+}
+
+int8_t get_divider() {
+    float divider = 2;
+
+    // faster
     if (get_right()) {
-        del = 3;
+        divider = 1;
     }
 
-    return pwr / del;
-}
-
-int8_t get_add() {
-    int8_t pwr = 0;
-    float del = 2;
-    if (get_L()) {
-        pwr = 100;
-    }
-    if (get_R()) {
-        pwr = -100;
-    }
+    // slower
     if (get_left()) {
-        del = 1;
-    }
-    if (get_right()) {
-        del = 3;
-    }
-    return pwr / del;
-}
-
-void check() {
-    get_X();
-    get_Y();
-    get_left();
-    get_right();
-    get_up();
-    get_down();
-    get_L();
-    get_R();
-}
-
-unsigned char Crc8(uint8_t *pcBlock, unsigned int len) {
-    unsigned char crc = 0xFF;
-    unsigned int i;
-
-    while (len--)
-    {
-        crc ^= *pcBlock++;
-
-        for (i = 0; i < 8; i++)
-            crc = crc & 0x80 ? (crc << 1) ^ 0x31 : crc << 1;
+        divider = 4;
     }
 
-    return crc;
-}
-
-void sendData(int8_t *data) {
-    for (uint8_t i = 2; i <= 5; i++) {
-        drifting_zero(data[i]);
-    }
-
-    data[7] = Crc8(data + 2, 5);
-    owi.write((uint8_t*)(data), 9);
-
-    // debug output:
-    Serial.print("X:");
-    Serial.print(get_X());
-    Serial.print("\tY: ");
-    Serial.print(get_Y());
-    Serial.print('\n');
-
-    for (int i = 0; i < 9; i++) {
-        Serial.print((int8_t)data[i]);
-        Serial.print('\t');
-    }
-
-    Serial.println();
-}
-
-void ping_motors() {
-  for (int i = -10; i <= 10; i++) {
-    int8_t data[] = {
-          0xAA,
-          0xEE,
-          i,
-          i,
-          i,
-          i,
-          0,
-          0,
-          0xEF
-      };
-      sendData(data);
-  }
+    return divider;
 }
 
 void setup() {
     Serial.begin(115200);
-    owi.begin(1200);
+    Serial.println("Begin...");
+
+    axis_l.begin(SMOOTHED_AVERAGE, SMOOTH_COUNT);
+    axis_r.begin(SMOOTHED_AVERAGE, SMOOTH_COUNT);
+    axis_v.begin(SMOOTHED_AVERAGE, SMOOTH_COUNT);
+
+    msp_uart.begin(9600);
+    msp.begin(msp_uart);
+
     pinMode(UP, INPUT);
     pinMode(LEFT, INPUT);
     pinMode(RIGHT, INPUT);
@@ -205,24 +133,70 @@ void setup() {
     pinMode(X, INPUT);
     pinMode(Y, INPUT);
 
-    delay(2200);
-    ping_motors();
+    pinMode(LED_BUILTIN, OUTPUT);
+
+    for (int i = 0; i < 8; i++) {
+        Serial.print("Init ");
+        set_motors(0,0,0,0);
+        delay(500);
+        digitalWrite(LED_BUILTIN, i % 2 == 0 ? HIGH : LOW);
+    }
+}
+
+inline uint16_t power_to_useconds(int8_t val) {
+    return map(val, -100, 100, MOTORS_MIN, MOTORS_MAX);
+}
+
+void set_motors(int8_t m1, int8_t m2, int8_t m3, int8_t m4) {
+#ifdef SERIAL_DEBUG
+    Serial.print("Motors: \t");
+    Serial.print(m1); Serial.print("\t");
+    Serial.print(m2); Serial.print("\t");
+    Serial.print(m3); Serial.print("\t");
+    Serial.print(m4); Serial.print("\t");
+    Serial.println();
+
+    Serial.print("PWM: \t\t");
+    Serial.print(power_to_useconds(m1)); Serial.print("\t");
+    Serial.print(power_to_useconds(m2)); Serial.print("\t");
+    Serial.print(power_to_useconds(m3)); Serial.print("\t");
+    Serial.print(power_to_useconds(m4)); Serial.print("\t");
+    Serial.println();
+
+    Serial.print("Axis:\t\t");
+    Serial.print(get_X()); Serial.print("\t");
+    Serial.print(get_Y()); Serial.print("\t");
+    Serial.println();
+
+    Serial.println();
+    Serial.println();
+#endif
+
+    uint16_t data[8] = {
+        power_to_useconds(m1),
+        power_to_useconds(m2),
+        power_to_useconds(m3),
+        power_to_useconds(m4),
+        power_to_useconds(0),
+        power_to_useconds(0),
+        power_to_useconds(0),
+        power_to_useconds(0)
+    };
+
+    msp.send(MSP_SET_MOTOR, data, 16);
 }
 
 void loop() {
-    int8_t data[] = {
-        0xAA,
-        0xEE,
-        get_left_th(),
-        get_vert_th_1(),
-        get_right_th(),
-        get_vert_th_2(),
-        get_add(),
-        0,
-        0xEF
-    };
+    axis_r.add(get_right_th());
+    axis_l.add(get_left_th());
+    axis_v.add(get_vert_th());
 
-    sendData(data);
+    set_motors(
+        static_cast<int8_t>(axis_r.get()),
+        static_cast<int8_t>(axis_v.get()),
+        static_cast<int8_t>(axis_l.get()),
+        static_cast<int8_t>(axis_v.get())
+    );
 
-    delay(50);
+    delay(5);
 }
