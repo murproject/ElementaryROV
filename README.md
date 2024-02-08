@@ -1,6 +1,6 @@
 # Прошивка для пульта ElementaryROV
 
-[Подробнее о наборе ElementaryROV.](https://robocenter.net/goods/kit/elementaryrov/)
+[Подробнее о наборе ElementaryROV.](https://robocenter.net/goods/kit/elementaryrovnew/)
 
 В зависимости от версии апаппарата, вам следует выбрать подходящую версию исходного кода:
 - [Аппараты, проданные **с декабря 2021**](https://github.com/murproject/ElementaryROV/tree/v3)
